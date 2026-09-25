@@ -15,7 +15,7 @@
 	// D1 数据库：先 `wrangler d1 create autocnb-issues`，把返回的 database_id 填到下面
 	"d1_databases": [
 		{
-			"binding": "autocnb_issues",
+			"binding": "DB",
 			"database_name": "autocnb-issues",
 			"database_id": "da1de975-9e55-45da-9d33-7d9bcfe7588b",
 			"remote": true
@@ -24,7 +24,7 @@
 	// KV 命名空间：先 `wrangler kv namespace create CACHE`，把返回的 id 填到下面
 	"kv_namespaces": [
 		{
-			"binding": "autocnb_issues",
+			"binding": "KV",
 			"id": "cd16f199db154ffdb593b77c15df8293",
 			"remote": true
 		}
