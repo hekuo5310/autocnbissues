@@ -37,6 +37,7 @@ export type CnbIssue = {
   title: string;
   body?: string;
   state: 'open' | 'closed';
+  state_reason?: 'completed' | 'not_planned' | 'reopened' | 'open' | string;
   labels?: { name?: string }[] | string[];
   author?: CnbUser;
   comment_count?: number;

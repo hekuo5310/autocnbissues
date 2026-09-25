@@ -14,8 +14,48 @@ type MockIssue = {
   number: number; title: string; body: string; state: 'open' | 'closed';
   labels: string[]; author: string; createdAt: string; lastActedAt: string; commentCount: number;
   invisible?: boolean;
+  state_reason?: string;
 };
 type MockComment = { id: string; author: string; body: string; createdAt: string; mineUid: number };
+
+const PIN_LABEL = '置顶';
+
+function mockRepoBase(env: Env): string {
+  return `https://cnb.cool/${env.CNB_REPO}`;
+}
+
+function parseLinkEntries(body: string): Array<{ type: 'issue'; number: number; url: string } | { type: 'commit'; sha: string; url: string }> {
+  const links: Array<{ type: 'issue'; number: number; url: string } | { type: 'commit'; sha: string; url: string }> = [];
+  const lineRe = /^- \[(?:Issue #(\d+)|提交 ([0-9a-f]{7,40}))\]\(([^)\s]+)\)\s*$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = lineRe.exec(body))) {
+    if (m[1]) links.push({ type: 'issue', number: Number(m[1]), url: m[3] });
+    else if (m[2]) links.push({ type: 'commit', sha: m[2].toLowerCase(), url: m[3] });
+  }
+  return links;
+}
+
+function stripLinkSections(body: string): string {
+  return body
+    .replace(/\n*### 关联 Issue\n(?:- \[[^\]]*\]\([^)]*\)\n?)+/g, '')
+    .replace(/\n*### 关联提交\n(?:- \[[^\]]*\]\([^)]*\)\n?)+/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
+}
+
+function rebuildBodyWithLinks(body: string, links: ReturnType<typeof parseLinkEntries>, env: Env): string {
+  const base = stripLinkSections(body);
+  const issues = links.filter((l) => l.type === 'issue');
+  const commits = links.filter((l) => l.type === 'commit');
+  let out = base;
+  if (issues.length) {
+    out += '\n\n### 关联 Issue\n' + issues.map((l) => `- [Issue #${l.number}](${mockRepoBase(env)}/-/issues/${l.number})`).join('\n');
+  }
+  if (commits.length) {
+    out += '\n\n### 关联提交\n' + commits.map((l) => `- [提交 ${l.sha.slice(0, 10)}](${mockRepoBase(env)}/-/commit/${l.sha})`).join('\n');
+  }
+  return out;
+}
 
 const BASE_ISSUES: MockIssue[] = [
   { number: 42, title: '播放器在全屏时切换清晰度体验不佳', state: 'open', labels: ['功能建议'], author: 'SDCOM', createdAt: '2026-09-23T08:12:00Z', lastActedAt: '2026-09-24T10:00:00Z', commentCount: 3, body: '## 这个功能要解决什么问题？\n\n全屏播放时想换清晰度必须退出全屏，很打断观看体验。\n\n## 设想的方案？如有\n\n希望播放控制栏常驻清晰度按钮。' },
@@ -48,7 +88,18 @@ mockApp.get('/api/issues', async (c, next) => {
   const state = c.req.query('state') || 'open';
   const created = await getCreatedIssues(c.env);
   const all = [...created, ...BASE_ISSUES].filter((i) => state === 'all' || i.state === state);
-  return c.json({ ok: true, issues: all.map((i) => ({ ...i, invisible: !!i.invisible, isMine: i.number >= 500 })), page: 1, hasMore: false });
+  return c.json({
+    ok: true,
+    issues: all.map((i) => ({
+      ...i,
+      invisible: !!i.invisible,
+      pinned: i.labels.includes(PIN_LABEL),
+      stateReason: i.state_reason || null,
+      isMine: i.number >= 500,
+    })),
+    page: 1,
+    hasMore: false,
+  });
 });
 
 mockApp.get('/api/issues/:number', async (c, next) => {
@@ -59,7 +110,14 @@ mockApp.get('/api/issues/:number', async (c, next) => {
   if (!i) return c.json({ ok: false, error: 'Issue 不存在（mock）' }, 404);
   return c.json({
     ok: true,
-    issue: { ...i, invisible: !!i.invisible, closedAt: i.state === 'closed' ? '2026-09-22T18:20:00Z' : null },
+    issue: {
+      ...i,
+      invisible: !!i.invisible,
+      pinned: i.labels.includes(PIN_LABEL),
+      stateReason: i.state_reason || null,
+      links: parseLinkEntries(i.body),
+      closedAt: i.state === 'closed' ? '2026-09-22T18:20:00Z' : null,
+    },
     isMine: n >= 500,
   });
 });
@@ -74,10 +132,15 @@ mockApp.patch('/api/issues/:number', async (c, next) => {
     .bind(s.uid, n)
     .first();
   if (!owned) return c.json({ ok: false, error: '只能管理自己提交的 Issue' }, 403);
-  const body = await c.req.json<{ state?: string; invisible?: boolean }>().catch(() => ({}) as { state?: string; invisible?: boolean });
+  const body = await c.req.json<{ state?: string; state_reason?: string; invisible?: boolean }>().catch(() => ({}) as { state?: string; state_reason?: string; invisible?: boolean });
   // 与生产逻辑一致：参数校验
   if (body.state !== undefined && body.state !== 'open' && body.state !== 'closed') {
     return c.json({ ok: false, error: '无效的 Issue 状态' }, 400);
+  }
+  if (body.state === 'closed') {
+    if (body.state_reason !== undefined && body.state_reason !== 'completed' && body.state_reason !== 'not_planned') {
+      return c.json({ ok: false, error: '无效的关闭原因' }, 400);
+    }
   }
   if (body.invisible !== undefined && typeof body.invisible !== 'boolean') {
     return c.json({ ok: false, error: '无效的私密设置' }, 400);
@@ -88,10 +151,92 @@ mockApp.patch('/api/issues/:number', async (c, next) => {
   const created = await getCreatedIssues(c.env);
   const idx = created.findIndex((x) => x.number === n);
   if (idx === -1) return c.json({ ok: false, error: 'mock 中不存在该 Issue' }, 404);
-  if (body.state === 'open' || body.state === 'closed') created[idx].state = body.state;
+  if (body.state === 'open' || body.state === 'closed') {
+    created[idx].state = body.state;
+    created[idx].state_reason = body.state === 'closed' ? (body.state_reason || 'completed') : 'reopened';
+  }
   if (typeof body.invisible === 'boolean') created[idx].invisible = body.invisible;
   await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
-  return c.json({ ok: true, state: created[idx].state, invisible: !!created[idx].invisible });
+  return c.json({ ok: true, state: created[idx].state, stateReason: created[idx].state_reason || null, invisible: !!created[idx].invisible });
+});
+
+mockApp.post('/api/issues/:number/pin', async (c, next) => {
+  if (c.env.DEV_MODE !== 'true') return next();
+  const s = await getSession(c);
+  if (!s) return c.json({ ok: false, error: '请先登录' }, 401);
+  const n = Number(c.req.param('number'));
+  const owned = await c.env.DB.prepare('SELECT issue_number FROM user_issues WHERE user_id = ? AND issue_number = ?')
+    .bind(s.uid, n)
+    .first();
+  if (!owned) return c.json({ ok: false, error: '只能管理自己提交的 Issue' }, 403);
+  const created = await getCreatedIssues(c.env);
+  const idx = created.findIndex((x) => x.number === n);
+  if (idx === -1) return c.json({ ok: false, error: 'mock 中不存在该 Issue' }, 404);
+  const pinned = created[idx].labels.includes(PIN_LABEL);
+  created[idx].labels = pinned ? created[idx].labels.filter((l) => l !== PIN_LABEL) : [...created[idx].labels, PIN_LABEL];
+  await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
+  return c.json({ ok: true, pinned: !pinned });
+});
+
+mockApp.post('/api/issues/:number/links', async (c, next) => {
+  if (c.env.DEV_MODE !== 'true') return next();
+  const s = await getSession(c);
+  if (!s) return c.json({ ok: false, error: '请先登录' }, 401);
+  const n = Number(c.req.param('number'));
+  const owned = await c.env.DB.prepare('SELECT issue_number FROM user_issues WHERE user_id = ? AND issue_number = ?')
+    .bind(s.uid, n)
+    .first();
+  if (!owned) return c.json({ ok: false, error: '只能管理自己提交的 Issue' }, 403);
+  const body = await c.req.json<{ type?: string; value?: string }>().catch(() => ({}) as { type?: string; value?: string });
+  const created = await getCreatedIssues(c.env);
+  const idx = created.findIndex((x) => x.number === n);
+  if (idx === -1) return c.json({ ok: false, error: 'mock 中不存在该 Issue' }, 404);
+  const links = parseLinkEntries(created[idx].body);
+  if (body.type === 'issue') {
+    const m = (body.value || '').trim().match(/^#?(\d+)$/);
+    if (!m) return c.json({ ok: false, error: '请输入有效的 Issue 编号' }, 400);
+    const num = Number(m[1]);
+    if (num === n) return c.json({ ok: false, error: '不能绑定 Issue 自身' }, 400);
+    if (links.some((l) => l.type === 'issue' && l.number === num)) return c.json({ ok: false, error: '该条目已绑定' }, 400);
+    links.push({ type: 'issue', number: num, url: `${mockRepoBase(c.env)}/-/issues/${num}` });
+  } else if (body.type === 'commit') {
+    let m = (body.value || '').trim().match(/^([0-9a-f]{7,40})$/i);
+    if (!m) m = (body.value || '').trim().match(/\/-commit\/([0-9a-f]{7,40})/i);
+    if (!m) return c.json({ ok: false, error: '请输入有效的提交 SHA 或提交链接' }, 400);
+    const sha = m[1].toLowerCase();
+    if (links.some((l) => l.type === 'commit' && l.sha === sha)) return c.json({ ok: false, error: '该条目已绑定' }, 400);
+    links.push({ type: 'commit', sha, url: `${mockRepoBase(c.env)}/-/commit/${sha}` });
+  } else {
+    return c.json({ ok: false, error: '无效的绑定类型' }, 400);
+  }
+  created[idx].body = rebuildBodyWithLinks(created[idx].body, links, c.env);
+  await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
+  return c.json({ ok: true, links });
+});
+
+mockApp.delete('/api/issues/:number/links', async (c, next) => {
+  if (c.env.DEV_MODE !== 'true') return next();
+  const s = await getSession(c);
+  if (!s) return c.json({ ok: false, error: '请先登录' }, 401);
+  const n = Number(c.req.param('number'));
+  const owned = await c.env.DB.prepare('SELECT issue_number FROM user_issues WHERE user_id = ? AND issue_number = ?')
+    .bind(s.uid, n)
+    .first();
+  if (!owned) return c.json({ ok: false, error: '只能管理自己提交的 Issue' }, 403);
+  const body = await c.req.json<{ type?: string; value?: string }>().catch(() => ({}) as { type?: string; value?: string });
+  const created = await getCreatedIssues(c.env);
+  const idx = created.findIndex((x) => x.number === n);
+  if (idx === -1) return c.json({ ok: false, error: 'mock 中不存在该 Issue' }, 404);
+  const links = parseLinkEntries(created[idx].body);
+  const kept = links.filter((l) => {
+    if (body.type === 'issue') return !(l.type === 'issue' && l.number === Number((body.value || '').replace(/^#/, '')));
+    if (body.type === 'commit') return !(l.type === 'commit' && l.sha === (body.value || '').toLowerCase());
+    return true;
+  });
+  if (kept.length === links.length) return c.json({ ok: false, error: '未找到该绑定条目' }, 404);
+  created[idx].body = rebuildBodyWithLinks(created[idx].body, kept, c.env);
+  await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
+  return c.json({ ok: true, links: kept });
 });
 
 mockApp.get('/api/issues/:number/comments', async (c, next) => {
@@ -175,7 +320,9 @@ mockApp.get('/api/my/issues', async (c, next) => {
       number: r.issue_number,
       title: known?.title ?? r.title,
       state: known?.state ?? 'open',
+      stateReason: known?.state_reason || null,
       invisible: !!known?.invisible,
+      pinned: (known?.labels ?? []).includes(PIN_LABEL),
       labels: known?.labels ?? [],
       commentCount: known?.commentCount ?? 0,
       createdAt: known?.createdAt ?? new Date(r.created_at).toISOString(),

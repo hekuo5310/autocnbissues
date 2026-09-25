@@ -101,15 +101,36 @@ export async function createIssue(
   });
 }
 
-/** 更新 Issue（PATCH /{repo}/-/issues/{number}）：支持修改 title / body / state / invisible（是否私密） */
+/** 更新 Issue（PATCH /{repo}/-/issues/{number}）：支持修改 title / body / state / invisible / state_reason */
 export async function updateIssue(
   env: Env,
   number: number | string,
-  patch: { title?: string; body?: string; state?: 'open' | 'closed'; invisible?: boolean },
+  patch: {
+    title?: string;
+    body?: string;
+    state?: 'open' | 'closed';
+    invisible?: boolean;
+    state_reason?: 'completed' | 'not_planned' | 'reopened';
+  },
 ): Promise<CnbIssue> {
   return cnbFetch<CnbIssue>(env, `/${env.CNB_REPO}/-/issues/${number}`, {
     method: 'PATCH',
     body: patch,
+  });
+}
+
+/** 追加标签（POST /{repo}/-/issues/{number}/labels，标签不存在时 CNB 自动创建） */
+export async function addLabels(env: Env, number: number | string, labels: string[]): Promise<void> {
+  await cnbFetch(env, `/${env.CNB_REPO}/-/issues/${number}/labels`, {
+    method: 'POST',
+    body: { labels },
+  });
+}
+
+/** 删除标签（DELETE /{repo}/-/issues/{number}/labels/{name}） */
+export async function removeLabel(env: Env, number: number | string, name: string): Promise<void> {
+  await cnbFetch(env, `/${env.CNB_REPO}/-/issues/${number}/labels/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
   });
 }
 
