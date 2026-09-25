@@ -3,7 +3,7 @@
 
 import { Hono } from 'hono';
 import type { Env, SessionData, CnbIssue } from './types';
-import { CnbApiError, listIssues, getIssue, listComments, createIssue, createComment, labelNames } from './cnb';
+import { CnbApiError, listIssues, getIssue, listComments, createIssue, updateIssue, createComment, labelNames } from './cnb';
 import { getTemplates, findTemplate, renderIssueBody } from './templates';
 import { sendCode, verifyCode, logout, getSession, requireSession, refreshSession, maskEmail } from './auth';
 import { mockApp } from './dev-mock';
@@ -120,6 +120,16 @@ app.post('/api/issues', async (c) => {
   ].join('\n');
 
   const issue = await createIssue(c.env, { title, body: fullBody, labels: tpl.labels });
+
+  // 创建完成后立刻修改内容：在尾部追加来源标注（用户邮箱）
+  try {
+    await updateIssue(c.env, issue.number, {
+      body: `${fullBody}\n\n---\n\n本条issues来自【${s.email}】`,
+    });
+  } catch (e) {
+    // 追加标注失败不影响 Issue 已创建的结果
+    console.error('[api] issue 来源标注追加失败:', e);
+  }
 
   await c.env.DB.prepare(
     'INSERT INTO user_issues (user_id, issue_number, template_key, title, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -298,7 +308,14 @@ app.post('/api/issues/:number/comments', async (c) => {
     return c.json({ ok: false, error: 'Issue 不存在或不可见' }, 404);
   }
 
-  const fullBody = [`> 来自「${c.env.SITE_NAME}」用户 **${s.nickname}**（邮箱已验证）`, '', text].join('\n');
+  // 需求：在回复头部补充来源标注（用户邮箱）
+  const fullBody = [
+    `本条回复来自【${s.email}】`,
+    '',
+    `> 来自「${c.env.SITE_NAME}」用户 **${s.nickname}**（邮箱已验证）`,
+    '',
+    text,
+  ].join('\n');
   const comment = await createComment(c.env, number, fullBody);
 
   await c.env.DB.prepare(

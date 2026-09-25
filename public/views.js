@@ -1,13 +1,13 @@
-/* views.js — 页面渲染：提交 Issue / 列表 / 详情 / 我的 */
+/* views.js — 页面渲染：提交 Issue / 列表 / 详情 / 我的（Material Design 3 风格，图标为内联 SVG） */
 'use strict';
 
 const TPL_META = {
-  '0-feature-request': { emoji: '💡' },
-  '1-bug-report': { emoji: '🐛' },
-  '2-experience-report': { emoji: '📝' },
-  '3-outage-report': { emoji: '🚨' },
-  '4-security-report': { emoji: '🔒' },
-  __blank__: { emoji: '✏️' },
+  '0-feature-request': { icon: 'lightbulb', tone: 'tertiary' },
+  '1-bug-report': { icon: 'bug', tone: 'error' },
+  '2-experience-report': { icon: 'description', tone: 'secondary' },
+  '3-outage-report': { icon: 'report', tone: 'error' },
+  '4-security-report': { icon: 'lock', tone: 'primary' },
+  __blank__: { icon: 'edit', tone: 'primary' },
 };
 
 async function loadTemplates(force = false) {
@@ -31,22 +31,23 @@ async function renderNewPage(el) {
   const tplData = await loadTemplates();
 
   const cards = tplData.templates
-    .map(
-      (t) => `
+    .map((t) => {
+      const meta = TPL_META[t.key] || { icon: 'pin', tone: 'primary' };
+      return `
       <div class="tpl-card" data-key="${esc(t.key)}" role="button" tabindex="0">
-        <span class="tpl-check">✓</span>
-        <div class="tpl-emoji">${TPL_META[t.key]?.emoji || '📌'}</div>
+        <span class="tpl-check">${ico('check')}</span>
+        <div class="tpl-ico tone-${meta.tone}">${ico(meta.icon)}</div>
         <h3>${esc(t.name)}</h3>
         <p>${esc(t.description || '')}</p>
-      </div>`,
-    )
+      </div>`;
+    })
     .join('');
 
   const blankCard = tplData.blankIssuesEnabled
     ? `
       <div class="tpl-card" data-key="__blank__" role="button" tabindex="0">
-        <span class="tpl-check">✓</span>
-        <div class="tpl-emoji">${TPL_META.__blank__.emoji}</div>
+        <span class="tpl-check">${ico('check')}</span>
+        <div class="tpl-ico">${ico(TPL_META.__blank__.icon)}</div>
         <h3>自由提交</h3>
         <p>不套用模板，直接描述你的问题或建议</p>
       </div>`
@@ -89,6 +90,7 @@ async function renderTemplateForm(key) {
     formEl.innerHTML = '<div class="empty">模板加载失败，请刷新重试</div>';
     return;
   }
+  const meta = TPL_META[tpl.key] || { icon: 'pin', tone: 'primary' };
 
   const fieldsHtml = tpl.body
     .map((f) => {
@@ -110,8 +112,8 @@ async function renderTemplateForm(key) {
 
   formEl.innerHTML = `
     <form class="issue-form" id="issue-form">
-      <h2>${TPL_META[tpl.key]?.emoji || '📌'} ${esc(tpl.name)}</h2>
-      <p class="form-desc">带 <span style="color:var(--red)">*</span> 为必填项。提交后会自动带上模板对应的标签，Issue 将创建在 ${esc(App.config.repo)} 仓库。</p>
+      <h2>${ico(meta.icon, 'h2-ico')} ${esc(tpl.name)}</h2>
+      <p class="form-desc">带 <span style="color:var(--md-error)">*</span> 为必填项。提交后会自动带上模板对应的标签，Issue 将创建在 ${esc(App.config.repo)} 仓库。</p>
       <div class="form-field">
         <label>标题 <span class="req">*</span></label>
         <input type="text" id="issue-title" placeholder="用一句话概括你的问题或建议（2-255 字）" maxlength="255" />
@@ -183,7 +185,7 @@ async function renderListPage(el, _tab, _page) {
         <button data-state="closed">已关闭</button>
         <button data-state="all">全部</button>
       </div>
-      <input class="search-box" type="text" id="issue-search" placeholder="搜索标题或内容…" />
+      <div class="search-box">${ico('search')}<input type="text" id="issue-search" placeholder="搜索标题或内容…" /></div>
     </div>
     <div class="issue-list" id="issue-list"><div class="page-loading"><div class="spinner"></div></div></div>
     <div class="pager" id="pager"></div>`;
@@ -201,14 +203,14 @@ async function renderListPage(el, _tab, _page) {
       if (keyword) qs.set('keyword', keyword);
       const r = await api(`/api/issues?${qs}`);
       if (!r.issues.length) {
-        listEl.innerHTML = `<div class="empty"><div class="empty-emoji">🍃</div><p>这里还没有 Issue</p><a href="#/new"><button class="btn btn-primary">去提交一个</button></a></div>`;
+        listEl.innerHTML = `<div class="empty"><div class="empty-ico">${ico('inbox')}</div><p>这里还没有 Issue</p><a href="#/new"><button class="btn btn-primary">去提交一个</button></a></div>`;
         return;
       }
       listEl.innerHTML = r.issues
         .map(
           (i) => `
           <a class="issue-row" href="#/issue/${i.number}">
-            <span class="issue-state-icon">${i.state === 'open' ? '🟢' : '🔴'}</span>
+            <span class="issue-state-icon ${i.state === 'open' ? 'is-open' : ''}">${ico(i.state === 'open' ? 'circle' : 'check_circle')}</span>
             <div class="issue-main">
               <div class="issue-title">${esc(i.title)}</div>
               <div class="issue-meta">
@@ -220,7 +222,7 @@ async function renderListPage(el, _tab, _page) {
                 <span>${fmtTime(i.lastActedAt || i.createdAt)} 更新</span>
               </div>
             </div>
-            <span class="issue-side">💬 ${i.commentCount}</span>
+            <span class="issue-side">${ico('chat')}${i.commentCount}</span>
           </a>`,
         )
         .join('');
@@ -228,14 +230,14 @@ async function renderListPage(el, _tab, _page) {
       const pager = document.getElementById('pager');
       if (r.page > 1 || r.hasMore) {
         pager.innerHTML = `
-          <button class="btn btn-outline" id="prev-page" ${r.page <= 1 ? 'disabled' : ''}>← 上一页</button>
+          <button class="btn btn-outline" id="prev-page" ${r.page <= 1 ? 'disabled' : ''}>${ico('arrow_back', 'inline-ico')} 上一页</button>
           <span class="muted" style="align-self:center">第 ${r.page} 页</span>
-          <button class="btn btn-outline" id="next-page" ${r.hasMore ? '' : 'disabled'}>下一页 →</button>`;
+          <button class="btn btn-outline" id="next-page" ${r.hasMore ? '' : 'disabled'}>下一页 ${ico('arrow_forward', 'inline-ico')}</button>`;
         document.getElementById('prev-page').onclick = () => { page -= 1; fetchList(); window.scrollTo({ top: 0 }); };
         document.getElementById('next-page').onclick = () => { page += 1; fetchList(); window.scrollTo({ top: 0 }); };
       }
     } catch (e) {
-      listEl.innerHTML = `<div class="empty"><div class="empty-emoji">😵</div><p>${esc(e.message)}</p></div>`;
+      listEl.innerHTML = `<div class="empty"><div class="empty-ico">${ico('error')}</div><p>${esc(e.message)}</p></div>`;
     }
   }
 
@@ -265,7 +267,7 @@ async function renderListPage(el, _tab, _page) {
 
 async function renderDetailPage(el, number) {
   if (!/^\d+$/.test(number || '')) {
-    el.innerHTML = '<div class="empty"><div class="empty-emoji">🤔</div><p>无效的 Issue 地址</p></div>';
+    el.innerHTML = `<div class="empty"><div class="empty-ico">${ico('error')}</div><p>无效的 Issue 地址</p></div>`;
     return;
   }
 
@@ -280,11 +282,11 @@ async function renderDetailPage(el, number) {
     <div class="detail-card">
       <div class="detail-head">
         <div class="detail-meta">
-          <span class="badge state-${esc(i.state)}">${i.state === 'open' ? '🟢 进行中' : '🔴 已关闭'}</span>
+          <span class="badge state-${esc(i.state)}">${i.state === 'open' ? '进行中' : '已关闭'}</span>
           ${i.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
           ${detail.isMine ? '<span class="badge mine">我提交的</span>' : ''}
           <span>由 <strong>${esc(i.author)}</strong> 创建于 ${fmtTime(i.createdAt)}</span>
-          <a href="${esc(App.config.repoUrl)}/issues/${i.number}" target="_blank" rel="noopener">在 CNB 上查看 ↗</a>
+          <a href="${esc(App.config.repoUrl)}/issues/${i.number}" target="_blank" rel="noopener">在 CNB 上查看 ${ico('open_in_new', 'inline-ico')}</a>
         </div>
         <h1>${esc(i.title)}</h1>
       </div>
@@ -292,7 +294,7 @@ async function renderDetailPage(el, number) {
     </div>
 
     <section class="comments-section">
-      <h2>💬 ${i.commentCount || comments.comments.length || 0} 条回复</h2>
+      <h2>${ico('forum', 'h2-ico')} ${i.commentCount || comments.comments.length || 0} 条回复</h2>
       <div id="comment-list">${renderComments(comments.comments)}</div>
       ${renderReplyEditor(i)}
     </section>`;
@@ -302,7 +304,7 @@ async function renderDetailPage(el, number) {
 
 function renderComments(comments) {
   if (!comments.length) {
-    return `<div class="empty" style="padding:30px 0"><div class="empty-emoji">🤫</div><p>还没有回复，来抢沙发</p></div>`;
+    return `<div class="empty" style="padding:30px 0"><div class="empty-ico">${ico('forum')}</div><p>还没有回复，来抢沙发</p></div>`;
   }
   return comments
     .map((cm) => {
@@ -324,13 +326,13 @@ function renderComments(comments) {
 function renderReplyEditor(issue) {
   if (!App.user) {
     return `
-      <div class="reply-editor" style="text-align:center;color:var(--text-2)">
+      <div class="reply-editor" style="text-align:center;color:var(--md-on-surface-variant)">
         <p style="margin:0 0 12px">登录后即可回复这个 Issue</p>
         <button class="btn btn-primary" onclick="LoginUI.open()">使用邮箱验证码登录</button>
       </div>`;
   }
   if (issue.state === 'closed') {
-    return `<div class="reply-editor" style="text-align:center;color:var(--muted)">该 Issue 已关闭，无法继续回复</div>`;
+    return `<div class="reply-editor" style="text-align:center;color:var(--md-on-surface-variant)">该 Issue 已关闭，无法继续回复</div>`;
   }
   return `
     <div class="reply-editor">
@@ -380,7 +382,7 @@ async function renderMinePage(el) {
   if (!App.user) {
     el.innerHTML = `
       <div class="empty">
-        <div class="empty-emoji">🔐</div>
+        <div class="empty-ico">${ico('lock')}</div>
         <p>登录后可以查看你提交的 Issue 与回复</p>
         <button class="btn btn-primary btn-lg" onclick="LoginUI.open()">使用邮箱验证码登录</button>
       </div>`;
@@ -400,7 +402,7 @@ async function renderMinePage(el) {
         <button class="btn btn-danger" id="btn-logout">退出登录</button>
       </div>
     </div>
-    <h2 style="font-size:17px;margin:0 0 14px">🪪 我提交的 Issue</h2>
+    <h2 class="section-title">${ico('assignment', 'h2-ico')} 我提交的 Issue</h2>
     <div class="issue-list" id="my-list"><div class="page-loading"><div class="spinner"></div></div></div>`;
 
   document.getElementById('btn-logout').onclick = logout;
@@ -424,14 +426,14 @@ async function renderMinePage(el) {
   try {
     const r = await api('/api/my/issues');
     if (!r.issues.length) {
-      listEl.innerHTML = `<div class="empty"><div class="empty-emoji">📭</div><p>你还没有提交过 Issue</p><a href="#/new"><button class="btn btn-primary">提交第一个</button></a></div>`;
+      listEl.innerHTML = `<div class="empty"><div class="empty-ico">${ico('send')}</div><p>你还没有提交过 Issue</p><a href="#/new"><button class="btn btn-primary">提交第一个</button></a></div>`;
       return;
     }
     listEl.innerHTML = r.issues
       .map(
         (i) => `
         <a class="issue-row" href="#/issue/${i.number}">
-          <span class="issue-state-icon">${i.state === 'open' ? '🟢' : '🔴'}</span>
+          <span class="issue-state-icon ${i.state === 'open' ? 'is-open' : ''}">${ico(i.state === 'open' ? 'circle' : 'check_circle')}</span>
           <div class="issue-main">
             <div class="issue-title">${esc(i.title)}</div>
             <div class="issue-meta">
@@ -441,11 +443,11 @@ async function renderMinePage(el) {
               <span>${fmtTime(i.createdAt)} 提交</span>
             </div>
           </div>
-          <span class="issue-side">💬 ${i.commentCount}</span>
+          <span class="issue-side">${ico('chat')}${i.commentCount}</span>
         </a>`,
       )
       .join('');
   } catch (e) {
-    listEl.innerHTML = `<div class="empty"><div class="empty-emoji">😵</div><p>${esc(e.message)}</p></div>`;
+    listEl.innerHTML = `<div class="empty"><div class="empty-ico">${ico('error')}</div><p>${esc(e.message)}</p></div>`;
   }
 }

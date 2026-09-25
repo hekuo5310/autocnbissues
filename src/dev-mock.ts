@@ -81,9 +81,17 @@ mockApp.post('/api/issues/:number/comments', async (c, next) => {
   const text = (body.body ?? '').trim();
   if (!text || text.length > 4000) return c.json({ ok: false, error: '回复内容需在 1-4000 个字符之间' }, 400);
   const n = Number(c.req.param('number'));
+  // 与生产逻辑一致：回复头部补充来源标注（用户邮箱）
+  const fullBody = [
+    `本条回复来自【${s.email}】`,
+    '',
+    `> 来自「${c.env.SITE_NAME}」用户 **${s.nickname}**（邮箱已验证）`,
+    '',
+    text,
+  ].join('\n');
   const commentId = `mock-${Date.now()}`;
   const list = await getComments(c.env, n);
-  list.push({ id: commentId, author: s.nickname, body: text, createdAt: new Date().toISOString(), mineUid: s.uid });
+  list.push({ id: commentId, author: s.nickname, body: fullBody, createdAt: new Date().toISOString(), mineUid: s.uid });
   await c.env.KV.put(COMMENTS_KEY_PREFIX + n, JSON.stringify(list));
   await c.env.DB.prepare(
     'INSERT INTO user_comments (user_id, issue_number, comment_id, body, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -104,9 +112,11 @@ mockApp.post('/api/issues', async (c, next) => {
   const number = await nextNumber(c.env);
   const now = new Date().toISOString();
   const list = await getCreatedIssues(c.env);
+  // 与生产逻辑一致：创建后立刻在尾部追加来源标注（用户邮箱）
+  const finalBody = `${body.body || `（mock 正文）${title}`}\n\n---\n\n本条issues来自【${s.email}】`;
   list.unshift({
     number, title,
-    body: body.body || `（mock 正文）${title}`,
+    body: finalBody,
     state: 'open', labels: [], author: s.nickname, createdAt: now, lastActedAt: now, commentCount: 0,
   });
   await c.env.KV.put(ISSUES_KEY, JSON.stringify(list));

@@ -101,6 +101,18 @@ export async function createIssue(
   });
 }
 
+/** 更新 Issue（PATCH /{repo}/-/issues/{number}）：支持修改 title / body / state */
+export async function updateIssue(
+  env: Env,
+  number: number | string,
+  patch: { title?: string; body?: string; state?: 'open' | 'closed' },
+): Promise<CnbIssue> {
+  return cnbFetch<CnbIssue>(env, `/${env.CNB_REPO}/-/issues/${number}`, {
+    method: 'PATCH',
+    body: patch,
+  });
+}
+
 export async function createComment(
   env: Env,
   number: number | string,
