@@ -40,7 +40,7 @@
 	"vars": {
 		"CNB_API": "https://api.cnb.cool",
 		"CNB_REPO": "MiaoJu/issue",
-		"SITE_NAME": "喵聚 Issues 提交系统",
+		"SITE_NAME": "喵聚",
 		"SITE_URL": "https://miaoju.d-dos.cc",
 		"MAIL_FROM": "noreply@zerexa.net",
 		"MAIL_FROM_NAME": "喵聚 Issues 提交系统",
