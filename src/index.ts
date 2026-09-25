@@ -19,6 +19,24 @@ app.use('/api/*', async (c, next) => {
   return next();
 });
 
+// 请求日志：输出到 Workers Observability（Dashboard → 该 Worker → Observability → Logs 可检索）
+// 结构化单行 JSON，按状态码分级：>=500 error，>=400 warn，其余 info
+app.use('/api/*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  const status = c.res.status;
+  const line = JSON.stringify({
+    event: 'api.request',
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+    status,
+    durationMs: Date.now() - start,
+  });
+  if (status >= 500) console.error(line);
+  else if (status >= 400) console.warn(line);
+  else console.log(line);
+});
+
 // 本地开发 mock（DEV_MODE=true 时接管 CNB 相关路由；生产直接放行）
 app.route('/', mockApp);
 
@@ -145,6 +163,7 @@ app.post('/api/issues', async (c) => {
     .run();
   await c.env.KV.put(rlKey, String(count + 1), { expirationTtl: 3600 });
 
+  console.log(JSON.stringify({ event: 'issue.created', number: issue.number, template: tplKey, by: maskEmail(s.email) }));
   return c.json({ ok: true, number: issue.number, url: `${c.env.SITE_URL}/#/issue/${issue.number}` });
 });
 
@@ -381,6 +400,7 @@ app.patch('/api/issues/:number', async (c) => {
   }
 
   const updated = await updateIssue(c.env, number, patch);
+  console.log(JSON.stringify({ event: 'issue.updated', number, patch, by: maskEmail(s.email) }));
   return c.json({
     ok: true,
     state: updated.state,
@@ -417,6 +437,7 @@ app.post('/api/issues/:number/pin', async (c) => {
     }
     throw e;
   }
+  console.log(JSON.stringify({ event: pinned ? 'issue.unpinned' : 'issue.pinned', number, by: maskEmail(s.email) }));
   return c.json({ ok: true, pinned: !pinned });
 });
 
@@ -456,6 +477,7 @@ app.post('/api/issues/:number/links', async (c) => {
     : `${repoHttpBase(c.env)}/-/commit/${parsed.sha}`;
   const next: IssueLink[] = [...links, { ...parsed, url } as IssueLink];
   await updateIssue(c.env, number, { body: rebuildBodyWithLinks(issue.body || '', next, c.env) });
+  console.log(JSON.stringify({ event: 'issue.linked', number, linkType: parsed.type, linkValue: parsed.type === 'issue' ? `#${parsed.number}` : parsed.sha.slice(0, 10), by: maskEmail(s.email) }));
   return c.json({ ok: true, links: next });
 });
 
@@ -483,6 +505,7 @@ app.delete('/api/issues/:number/links', async (c) => {
   );
   if (next.length === links.length) return c.json({ ok: false, error: '未找到该绑定条目' }, 404);
   await updateIssue(c.env, number, { body: rebuildBodyWithLinks(issue.body || '', next, c.env) });
+  console.log(JSON.stringify({ event: 'issue.unlinked', number, linkType: parsed.type, linkValue: parsed.type === 'issue' ? `#${parsed.number}` : parsed.sha.slice(0, 10), by: maskEmail(s.email) }));
   return c.json({ ok: true, links: next });
 });
 
@@ -567,6 +590,7 @@ app.post('/api/issues/:number/comments', async (c) => {
   await c.env.KV.put(cdKey, '1', { expirationTtl: 60 });
   await c.env.KV.put(rlKey, String(count + 1), { expirationTtl: 3600 });
 
+  console.log(JSON.stringify({ event: 'comment.created', issue: Number(number), commentId: String(comment.id), by: maskEmail(s.email) }));
   return c.json({ ok: true, commentId: String(comment.id) });
 });
 

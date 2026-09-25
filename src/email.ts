@@ -74,6 +74,9 @@ export async function sendVerificationEmail(
       throw new Error('SEND_EMAIL binding 未配置（检查 wrangler.jsonc 的 send_email 段）');
     }
     await env.SEND_EMAIL.send(payload);
+    // 邮件发送成功事件（收件人脱敏），供 Workers Observability 检索
+    const [toName, toDomain] = to.split('@');
+    console.log(JSON.stringify({ event: 'email.sent', to: `${toName.slice(0, 2)}***@${toDomain}` }));
     return { sent: true };
   } catch (e: unknown) {
     const err = e as { code?: string; message?: string };

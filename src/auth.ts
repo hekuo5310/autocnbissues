@@ -88,6 +88,7 @@ export async function sendCode(c: Context<{ Bindings: Env }>) {
       500,
     );
   }
+  console.log(JSON.stringify({ event: 'auth.code_sent', to: maskEmail(email) }));
   return c.json({ ok: true });
 }
 
@@ -152,6 +153,7 @@ export async function verifyCode(c: Context<{ Bindings: Env }>) {
     path: '/',
     maxAge: SESSION_TTL,
   });
+  console.log(JSON.stringify({ event: 'auth.login', uid: user.id, email: maskEmail(email) }));
   return c.json({ ok: true, user: session });
 }
 

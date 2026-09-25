@@ -47,6 +47,7 @@
 		"DEV_MODE": "false"
 	},
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 1
 	}
 }
