@@ -1,53 +1,52 @@
 // wrangler 配置 — Cloudflare Workers + D1 + KV + Email Sending
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "autocnb-issues",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
-
-  // 静态资源（public/ 目录），非 /api/* 请求由静态资源优先响应
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS"
-  },
-
-  // D1 数据库：先 `wrangler d1 create autocnb-issues`，把返回的 database_id 填到下面
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "autocnb-issues",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
-      "migrations_dir": "migrations"
-    }
-  ],
-
-  // KV 命名空间：先 `wrangler kv namespace create CACHE`，把返回的 id 填到下面
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
-    }
-  ],
-
-  // 邮件发送绑定（Cloudflare Email Service 新功能）
-  // 前提：域名已托管到 Cloudflare 并在 Dashboard → Email Service → Email Sending 完成 Onboard Domain
-  "send_email": [
-    { "name": "SEND_EMAIL" }
-  ],
-
-  // 非敏感变量（敏感的 CNB_TOKEN 用 `wrangler secret put CNB_TOKEN` 配置）
-  "vars": {
-    "CNB_API": "https://api.cnb.cool",
-    "CNB_REPO": "MiaoJu/issue",
-    "SITE_NAME": "喵聚 Issues",
-    "SITE_URL": "https://autocnb-issues.<your-subdomain>.workers.dev",
-    "MAIL_FROM": "noreply@your-domain.com",
-    "MAIL_FROM_NAME": "喵聚 Issues",
-    "DEV_MODE": "false"
-  },
-
-  "observability": {
-    "enabled": true
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "autocnb-issues",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// 静态资源（public/ 目录），非 /api/* 请求由静态资源优先响应
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
+	// D1 数据库：先 `wrangler d1 create autocnb-issues`，把返回的 database_id 填到下面
+	"d1_databases": [
+		{
+			"binding": "autocnb_issues",
+			"database_name": "autocnb-issues",
+			"database_id": "da1de975-9e55-45da-9d33-7d9bcfe7588b",
+			"remote": true
+		}
+	],
+	// KV 命名空间：先 `wrangler kv namespace create CACHE`，把返回的 id 填到下面
+	"kv_namespaces": [
+		{
+			"binding": "autocnb_issues",
+			"id": "cd16f199db154ffdb593b77c15df8293",
+			"remote": true
+		}
+	],
+	// 邮件发送绑定（Cloudflare Email Service 新功能）
+	// 前提：域名已托管到 Cloudflare 并在 Dashboard → Email Service → Email Sending 完成 Onboard Domain
+	"send_email": [
+		{
+			"name": "SEND_EMAIL"
+		}
+	],
+	// 非敏感变量（敏感的 CNB_TOKEN 用 `wrangler secret put CNB_TOKEN` 配置）
+	"vars": {
+		"CNB_API": "https://api.cnb.cool",
+		"CNB_REPO": "MiaoJu/issue",
+		"SITE_NAME": "喵聚 Issues 提交系统",
+		"SITE_URL": "https://miaoju.d-dos.cc",
+		"MAIL_FROM": "noreply@zerexa.net",
+		"MAIL_FROM_NAME": "喵聚 Issues 提交系统",
+		"DEV_MODE": "false"
+	},
+	"observability": {
+		"enabled": true
+	}
 }
