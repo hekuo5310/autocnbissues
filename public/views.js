@@ -84,7 +84,22 @@ async function renderTemplateForm(key) {
   const tplData = await loadTemplates();
   const tpl =
     key === '__blank__'
-      ? { key: '__blank__', name: '自由提交', body: [] }
+      ? {
+          key: '__blank__',
+          name: '自由提交',
+          body: [
+            {
+              type: 'textarea',
+              id: '__blank_content__',
+              attributes: {
+                label: '内容',
+                description: '详细描述你的问题、建议或想法，支持 Markdown 语法',
+                placeholder: '请描述你遇到的问题或想提出的建议…\n\n包含复现步骤、期望结果、环境信息等能帮助我们更快处理。',
+              },
+              validations: { required: true },
+            },
+          ],
+        }
       : tplData.templates.find((t) => t.key === key);
   if (!tpl) {
     formEl.innerHTML = '<div class="empty">模板加载失败，请刷新重试</div>';
@@ -113,7 +128,7 @@ async function renderTemplateForm(key) {
   formEl.innerHTML = `
     <form class="issue-form" id="issue-form">
       <h2>${ico(meta.icon, 'h2-ico')} ${esc(tpl.name)}</h2>
-      <p class="form-desc">带 <span style="color:var(--md-error)">*</span> 为必填项。提交后会自动带上模板对应的标签，Issue 将创建在 ${esc(App.config.repo)} 仓库。</p>
+      <p class="form-desc">带 <span style="color:var(--md-error)">*</span> 为必填项。${tpl.labels.length ? '提交后会自动带上模板对应的标签，' : ''}Issue 将创建在 ${esc(App.config.repo)} 仓库。</p>
       <div class="form-field">
         <label>标题 <span class="req">*</span></label>
         <input type="text" id="issue-title" placeholder="用一句话概括你的问题或建议（2-255 字）" maxlength="255" />
@@ -215,6 +230,7 @@ async function renderListPage(el, _tab, _page) {
               <div class="issue-title">${esc(i.title)}</div>
               <div class="issue-meta">
                 <span class="badge state-${esc(i.state)}">${i.state === 'open' ? '进行中' : '已关闭'}</span>
+                ${i.invisible ? `<span class="badge private">${ico('visibility_off')}私密</span>` : ''}
                 ${i.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
                 ${i.isMine ? '<span class="badge mine">我提交的</span>' : ''}
                 <span>#${i.number}</span>
@@ -283,6 +299,7 @@ async function renderDetailPage(el, number) {
       <div class="detail-head">
         <div class="detail-meta">
           <span class="badge state-${esc(i.state)}">${i.state === 'open' ? '进行中' : '已关闭'}</span>
+          ${i.invisible ? `<span class="badge private">${ico('visibility_off')}私密</span>` : ''}
           ${i.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
           ${detail.isMine ? '<span class="badge mine">我提交的</span>' : ''}
           <span>由 <strong>${esc(i.author)}</strong> 创建于 ${fmtTime(i.createdAt)}</span>
@@ -292,6 +309,7 @@ async function renderDetailPage(el, number) {
       </div>
       <div class="markdown-body">${renderMarkdown(i.body)}</div>
     </div>
+    ${detail.isMine ? renderOwnerPanel(i) : ''}
 
     <section class="comments-section">
       <h2>${ico('forum', 'h2-ico')} ${i.commentCount || comments.comments.length || 0} 条回复</h2>
@@ -300,6 +318,64 @@ async function renderDetailPage(el, number) {
     </section>`;
 
   bindReplyEditor(number);
+  bindOwnerPanel(number, i);
+}
+
+// ==================== 详情页：Issue 管理（仅本人可见） ====================
+
+function renderOwnerPanel(i) {
+  return `
+    <div class="owner-panel" id="owner-panel">
+      <div class="owner-title">${ico('tune', 'h2-ico')} 管理</div>
+      <div class="owner-actions">
+        <button class="btn btn-outline" id="btn-toggle-state">
+          ${ico(i.state === 'open' ? 'lock' : 'restart_alt', 'inline-ico')} ${i.state === 'open' ? '关闭 Issue' : '重新打开'}
+        </button>
+        <button class="btn btn-outline" id="btn-toggle-privacy">
+          ${ico(i.invisible ? 'visibility' : 'visibility_off', 'inline-ico')} ${i.invisible ? '设为公开' : '设为私密'}
+        </button>
+      </div>
+      <p class="owner-hint">${i.invisible
+        ? '当前为私密状态：这条 Issue 仅你与仓库管理员可见。'
+        : '当前为公开状态：所有人都可以查看这条 Issue。'}</p>
+    </div>`;
+}
+
+function bindOwnerPanel(number, issue) {
+  const stateBtn = document.getElementById('btn-toggle-state');
+  const privacyBtn = document.getElementById('btn-toggle-privacy');
+  if (!stateBtn || !privacyBtn) return;
+
+  async function patchIssue(patch, btn, doneMsg) {
+    btn.disabled = true;
+    const original = btn.innerHTML;
+    btn.innerHTML = `${ico('hourglass_empty', 'inline-ico')} 处理中…`;
+    try {
+      await api(`/api/issues/${number}`, { method: 'PATCH', body: patch });
+      toast(doneMsg);
+      await renderDetailPage(document.getElementById('app'), number);
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+      if (e.status === 401) {
+        toast('登录状态已过期，请重新登录', 'warn');
+        LoginUI.open();
+      } else if (e.status === 403) {
+        toast('只能管理自己提交的 Issue', 'error');
+      } else {
+        toast(e.message, 'error', 5000);
+      }
+    }
+  }
+
+  stateBtn.onclick = () => {
+    const willClose = issue.state === 'open';
+    patchIssue({ state: willClose ? 'closed' : 'open' }, stateBtn, willClose ? `Issue #${issue.number} 已关闭` : `Issue #${issue.number} 已重新打开`);
+  };
+  privacyBtn.onclick = () => {
+    const willPrivate = !issue.invisible;
+    patchIssue({ invisible: willPrivate }, privacyBtn, willPrivate ? `Issue #${issue.number} 已设为私密` : `Issue #${issue.number} 已设为公开`);
+  };
 }
 
 function renderComments(comments) {
@@ -438,6 +514,7 @@ async function renderMinePage(el) {
             <div class="issue-title">${esc(i.title)}</div>
             <div class="issue-meta">
               <span class="badge state-${esc(i.state)}">${i.state === 'open' ? '进行中' : '已关闭'}</span>
+              ${i.invisible ? `<span class="badge private">${ico('visibility_off')}私密</span>` : ''}
               ${i.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
               <span>#${i.number}</span>
               <span>${fmtTime(i.createdAt)} 提交</span>

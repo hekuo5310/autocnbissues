@@ -101,11 +101,11 @@ export async function createIssue(
   });
 }
 
-/** 更新 Issue（PATCH /{repo}/-/issues/{number}）：支持修改 title / body / state */
+/** 更新 Issue（PATCH /{repo}/-/issues/{number}）：支持修改 title / body / state / invisible（是否私密） */
 export async function updateIssue(
   env: Env,
   number: number | string,
-  patch: { title?: string; body?: string; state?: 'open' | 'closed' },
+  patch: { title?: string; body?: string; state?: 'open' | 'closed'; invisible?: boolean },
 ): Promise<CnbIssue> {
   return cnbFetch<CnbIssue>(env, `/${env.CNB_REPO}/-/issues/${number}`, {
     method: 'PATCH',

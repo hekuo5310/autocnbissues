@@ -13,6 +13,7 @@ const COMMENTS_KEY_PREFIX = 'mock:comments:';
 type MockIssue = {
   number: number; title: string; body: string; state: 'open' | 'closed';
   labels: string[]; author: string; createdAt: string; lastActedAt: string; commentCount: number;
+  invisible?: boolean;
 };
 type MockComment = { id: string; author: string; body: string; createdAt: string; mineUid: number };
 
@@ -47,7 +48,7 @@ mockApp.get('/api/issues', async (c, next) => {
   const state = c.req.query('state') || 'open';
   const created = await getCreatedIssues(c.env);
   const all = [...created, ...BASE_ISSUES].filter((i) => state === 'all' || i.state === state);
-  return c.json({ ok: true, issues: all.map((i) => ({ ...i, isMine: i.number >= 500 })), page: 1, hasMore: false });
+  return c.json({ ok: true, issues: all.map((i) => ({ ...i, invisible: !!i.invisible, isMine: i.number >= 500 })), page: 1, hasMore: false });
 });
 
 mockApp.get('/api/issues/:number', async (c, next) => {
@@ -58,9 +59,39 @@ mockApp.get('/api/issues/:number', async (c, next) => {
   if (!i) return c.json({ ok: false, error: 'Issue 不存在（mock）' }, 404);
   return c.json({
     ok: true,
-    issue: { ...i, closedAt: i.state === 'closed' ? '2026-09-22T18:20:00Z' : null },
+    issue: { ...i, invisible: !!i.invisible, closedAt: i.state === 'closed' ? '2026-09-22T18:20:00Z' : null },
     isMine: n >= 500,
   });
+});
+
+mockApp.patch('/api/issues/:number', async (c, next) => {
+  if (c.env.DEV_MODE !== 'true') return next();
+  const s = await getSession(c);
+  if (!s) return c.json({ ok: false, error: '请先登录' }, 401);
+  const n = Number(c.req.param('number'));
+  // 与生产逻辑一致：只能管理自己提交的 Issue（user_issues 表归属校验）
+  const owned = await c.env.DB.prepare('SELECT issue_number FROM user_issues WHERE user_id = ? AND issue_number = ?')
+    .bind(s.uid, n)
+    .first();
+  if (!owned) return c.json({ ok: false, error: '只能管理自己提交的 Issue' }, 403);
+  const body = await c.req.json<{ state?: string; invisible?: boolean }>().catch(() => ({}) as { state?: string; invisible?: boolean });
+  // 与生产逻辑一致：参数校验
+  if (body.state !== undefined && body.state !== 'open' && body.state !== 'closed') {
+    return c.json({ ok: false, error: '无效的 Issue 状态' }, 400);
+  }
+  if (body.invisible !== undefined && typeof body.invisible !== 'boolean') {
+    return c.json({ ok: false, error: '无效的私密设置' }, 400);
+  }
+  if (body.state === undefined && body.invisible === undefined) {
+    return c.json({ ok: false, error: '没有需要修改的内容' }, 400);
+  }
+  const created = await getCreatedIssues(c.env);
+  const idx = created.findIndex((x) => x.number === n);
+  if (idx === -1) return c.json({ ok: false, error: 'mock 中不存在该 Issue' }, 404);
+  if (body.state === 'open' || body.state === 'closed') created[idx].state = body.state;
+  if (typeof body.invisible === 'boolean') created[idx].invisible = body.invisible;
+  await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
+  return c.json({ ok: true, state: created[idx].state, invisible: !!created[idx].invisible });
 });
 
 mockApp.get('/api/issues/:number/comments', async (c, next) => {
@@ -144,6 +175,7 @@ mockApp.get('/api/my/issues', async (c, next) => {
       number: r.issue_number,
       title: known?.title ?? r.title,
       state: known?.state ?? 'open',
+      invisible: !!known?.invisible,
       labels: known?.labels ?? [],
       commentCount: known?.commentCount ?? 0,
       createdAt: known?.createdAt ?? new Date(r.created_at).toISOString(),

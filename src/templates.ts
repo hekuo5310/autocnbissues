@@ -113,7 +113,19 @@ export function findTemplate(config: TemplateConfig, key: string): IssueTemplate
       name: '自由提交',
       description: '不套用模板，直接描述你的问题或建议',
       labels: [],
-      body: [],
+      body: [
+        {
+          type: 'textarea',
+          id: '__blank_content__',
+          attributes: {
+            label: '内容',
+            description: '详细描述你的问题、建议或想法，支持 Markdown 语法',
+            placeholder:
+              '请描述你遇到的问题或想提出的建议…\n\n包含复现步骤、期望结果、环境信息等能帮助我们更快处理。',
+          },
+          validations: { required: true },
+        },
+      ],
     };
   }
   return config.templates.find((t) => t.key === key) ?? null;

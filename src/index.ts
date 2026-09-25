@@ -6,11 +6,18 @@ import type { Env, SessionData, CnbIssue } from './types';
 import { CnbApiError, listIssues, getIssue, listComments, createIssue, updateIssue, createComment, labelNames } from './cnb';
 import { getTemplates, findTemplate, renderIssueBody } from './templates';
 import { sendCode, verifyCode, logout, getSession, requireSession, refreshSession, maskEmail } from './auth';
+import { ensureSchema } from './bootstrap';
 import { mockApp } from './dev-mock';
 
 type C = { Bindings: Env };
 
 const app = new Hono<C>();
+
+// D1 表结构自愈：每个隔离实例首次 API 请求前幂等建表（修复新库未跑迁移导致的 500）
+app.use('/api/*', async (c, next) => {
+  await ensureSchema(c.env);
+  return next();
+});
 
 // 本地开发 mock（DEV_MODE=true 时接管 CNB 相关路由；生产直接放行）
 app.route('/', mockApp);
@@ -167,6 +174,7 @@ app.get('/api/issues', async (c) => {
       number: Number(i.number),
       title: i.title,
       state: i.state,
+      invisible: !!i.invisible,
       labels: labelNames(i),
       commentCount: i.comment_count ?? 0,
       author: i.author?.nickname || i.author?.username || '',
@@ -199,6 +207,7 @@ app.get('/api/my/issues', async (c) => {
           number: r.issue_number,
           title: i.title || r.title,
           state: i.state,
+          invisible: !!i.invisible,
           labels: labelNames(i),
           commentCount: i.comment_count ?? 0,
           createdAt: i.created_at,
@@ -208,7 +217,8 @@ app.get('/api/my/issues', async (c) => {
         return {
           number: r.issue_number,
           title: r.title,
-          state: 'open',
+          state: 'open' as const,
+          invisible: false,
           labels: [],
           commentCount: 0,
           createdAt: new Date(r.created_at).toISOString(),
@@ -235,6 +245,7 @@ app.get('/api/issues/:number', async (c) => {
       title: issue.title,
       body: issue.body || '',
       state: issue.state,
+      invisible: !!issue.invisible,
       labels: labelNames(issue),
       author: issue.author?.nickname || issue.author?.username || '',
       commentCount: issue.comment_count ?? 0,
@@ -242,6 +253,49 @@ app.get('/api/issues/:number', async (c) => {
       closedAt: issue.closed_at,
     },
     isMine: mine.has(Number(issue.number)),
+  });
+});
+
+// 管理 Issue（仅限本人）：关闭/重新打开、设为私密/公开
+app.patch('/api/issues/:number', async (c) => {
+  const s = await requireSession(c);
+  if (s instanceof Response) return s;
+
+  const number = c.req.param('number');
+  if (!/^\d+$/.test(number)) return c.json({ ok: false, error: '无效的 Issue 编号' }, 400);
+
+  // 归属校验：只能操作自己提交的 Issue
+  const mine = await myIssueNumbers(c, s);
+  if (!mine.has(Number(number))) {
+    return c.json({ ok: false, error: '只能管理自己提交的 Issue' }, 403);
+  }
+
+  const body = await c.req
+    .json<{ state?: string; invisible?: boolean }>()
+    .catch(() => ({}) as { state?: string; invisible?: boolean });
+
+  const patch: { state?: 'open' | 'closed'; invisible?: boolean } = {};
+  if (body.state !== undefined) {
+    if (body.state !== 'open' && body.state !== 'closed') {
+      return c.json({ ok: false, error: '无效的 Issue 状态' }, 400);
+    }
+    patch.state = body.state;
+  }
+  if (body.invisible !== undefined) {
+    if (typeof body.invisible !== 'boolean') {
+      return c.json({ ok: false, error: '无效的私密设置' }, 400);
+    }
+    patch.invisible = body.invisible;
+  }
+  if (!Object.keys(patch).length) {
+    return c.json({ ok: false, error: '没有需要修改的内容' }, 400);
+  }
+
+  const updated = await updateIssue(c.env, number, patch);
+  return c.json({
+    ok: true,
+    state: updated.state,
+    invisible: !!updated.invisible,
   });
 });
 
