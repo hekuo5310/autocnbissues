@@ -91,14 +91,34 @@ export async function listComments(
   return cnbFetch<CnbComment[]>(env, `/${env.CNB_REPO}/-/issues/${number}/comments`, { query });
 }
 
+/**
+ * 创建 Issue。
+ * 部分仓库未给服务账号开放「标签」操作权限（HTTP 403 / errcode 2003015，
+ * "You do not have the authority to operate the issue label"）：
+ * 携带模板标签创建会被整体拒绝。此时自动降级为不带标签创建，
+ * 返回 labelsApplied=false 供上层提示与记录。
+ */
 export async function createIssue(
   env: Env,
   form: { title: string; body: string; labels?: string[] },
-): Promise<CnbIssue> {
-  return cnbFetch<CnbIssue>(env, `/${env.CNB_REPO}/-/issues`, {
-    method: 'POST',
-    body: { title: form.title, body: form.body, labels: form.labels ?? [] },
-  });
+): Promise<{ issue: CnbIssue; labelsApplied: boolean }> {
+  const labels = form.labels ?? [];
+  try {
+    const issue = await cnbFetch<CnbIssue>(env, `/${env.CNB_REPO}/-/issues`, {
+      method: 'POST',
+      body: { title: form.title, body: form.body, labels },
+    });
+    return { issue, labelsApplied: true };
+  } catch (e) {
+    if (labels.length && e instanceof CnbApiError && e.status === 403) {
+      const issue = await cnbFetch<CnbIssue>(env, `/${env.CNB_REPO}/-/issues`, {
+        method: 'POST',
+        body: { title: form.title, body: form.body, labels: [] },
+      });
+      return { issue, labelsApplied: false };
+    }
+    throw e;
+  }
 }
 
 /** 更新 Issue（PATCH /{repo}/-/issues/{number}）：支持修改 title / body / state / invisible / state_reason */

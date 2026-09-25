@@ -192,7 +192,7 @@ async function renderTemplateForm(key) {
     btn.textContent = '提交中…';
     try {
       const r = await api('/api/issues', { method: 'POST', body: { template: tpl.key, title, fields } });
-      toast(`Issue #${r.number} 提交成功！`);
+      toast(r.labelsApplied === false ? `Issue #${r.number} 提交成功（模板标签暂无权限，已跳过）` : `Issue #${r.number} 提交成功！`);
       location.hash = `#/issue/${r.number}`;
     } catch (err) {
       if (err.status === 401) {
@@ -420,8 +420,8 @@ function bindOwnerPanel(number, issue) {
     const original = btn.innerHTML;
     btn.innerHTML = `${ico('hourglass_empty', 'inline-ico')} 处理中…`;
     try {
-      await api(`/api/issues/${number}`, { method: 'PATCH', body: patch });
-      toast(doneMsg);
+      const r = await api(`/api/issues/${number}`, { method: 'PATCH', body: patch });
+      toast(patch.invisible === true && r.cnbApplied === false ? `Issue #${issue.number} 已设为私密（CNB 暂未生效，仅本站隐藏）` : doneMsg);
       await renderDetailPage(document.getElementById('app'), number);
     } catch (e) {
       btn.disabled = false;
@@ -484,7 +484,8 @@ function bindOwnerPanel(number, issue) {
     btn.innerHTML = `${ico('hourglass_empty', 'inline-ico')} 处理中…`;
     try {
       const r = await api(`/api/issues/${number}/pin`, { method: 'POST' });
-      toast(r.pinned ? `Issue #${issue.number} 已置顶` : `Issue #${issue.number} 已取消置顶`);
+      if (r.pinned) toast(r.labelSynced === false ? `Issue #${issue.number} 已置顶（CNB 标签无权限，仅本站生效）` : `Issue #${issue.number} 已置顶`);
+      else toast(`Issue #${issue.number} 已取消置顶`);
       await renderDetailPage(document.getElementById('app'), number);
     } catch (e2) {
       btn.disabled = false;

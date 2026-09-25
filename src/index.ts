@@ -144,7 +144,7 @@ app.post('/api/issues', async (c) => {
     issueBody,
   ].join('\n');
 
-  const issue = await createIssue(c.env, { title, body: fullBody, labels: tpl.labels });
+  const { issue, labelsApplied } = await createIssue(c.env, { title, body: fullBody, labels: tpl.labels });
 
   // 创建完成后立刻修改内容：在尾部追加来源标注（用户邮箱）
   try {
@@ -163,8 +163,8 @@ app.post('/api/issues', async (c) => {
     .run();
   await c.env.KV.put(rlKey, String(count + 1), { expirationTtl: 3600 });
 
-  console.log(JSON.stringify({ event: 'issue.created', number: issue.number, template: tplKey, by: maskEmail(s.email) }));
-  return c.json({ ok: true, number: issue.number, url: `${c.env.SITE_URL}/#/issue/${issue.number}` });
+  console.log(JSON.stringify({ event: 'issue.created', number: issue.number, template: tplKey, labelsApplied, by: maskEmail(s.email) }));
+  return c.json({ ok: true, number: issue.number, url: `${c.env.SITE_URL}/#/issue/${issue.number}`, labelsApplied });
 });
 
 // ---------- Issue 列表 / 详情 / 评论 ----------
@@ -249,25 +249,34 @@ app.get('/api/issues', async (c) => {
   const session = await getSession(c);
   const issues = await listIssues(c.env, { state, page, pageSize, keyword });
   const mine = await myIssueNumbers(c, session);
+  // 站内置顶/私密兜底（D1）：CNB 标签无权限或 invisible 被忽略时仍生效
+  const pinnedRows = await c.env.DB.prepare('SELECT issue_number FROM pinned_issues').all<{ issue_number: number }>();
+  const d1Pinned = new Set((pinnedRows.results ?? []).map((r) => r.issue_number));
+  const privateRows = await c.env.DB.prepare('SELECT issue_number FROM private_issues').all<{ issue_number: number }>();
+  const d1Private = new Set((privateRows.results ?? []).map((r) => r.issue_number));
 
-  return c.json({
-    ok: true,
-    issues: issues.map((i) => ({
+  const list = issues.map((i) => ({
       number: Number(i.number),
       title: i.title,
       state: i.state,
       stateReason: i.state_reason || null,
-      invisible: !!i.invisible,
-      pinned: labelNames(i).includes(PIN_LABEL),
+      invisible: !!i.invisible || d1Private.has(Number(i.number)),
+      pinned: labelNames(i).includes(PIN_LABEL) || d1Pinned.has(Number(i.number)),
       labels: labelNames(i),
       commentCount: i.comment_count ?? 0,
       author: i.author?.nickname || i.author?.username || '',
       createdAt: i.created_at,
       lastActedAt: i.last_acted_at || i.updated_at,
       isMine: mine.has(Number(i.number)),
-    })),
+    }))
+    // 私密 issue 仅对本人可见（与 CNB invisible 语义一致）
+    .filter((x) => !x.invisible || x.isMine);
+
+  return c.json({
+    ok: true,
+    issues: list,
     page,
-    hasMore: issues.length >= pageSize,
+    hasMore: list.length >= pageSize,
   });
 });
 
@@ -287,13 +296,15 @@ app.get('/api/my/issues', async (c) => {
     (rows.results ?? []).map(async (r) => {
       try {
         const i = await getIssue(c.env, r.issue_number);
+        const d1PinnedRow = !!(await c.env.DB.prepare('SELECT 1 FROM pinned_issues WHERE issue_number = ?').bind(r.issue_number).first());
+        const d1PrivateRow = !!(await c.env.DB.prepare('SELECT 1 FROM private_issues WHERE issue_number = ?').bind(r.issue_number).first());
         return {
           number: r.issue_number,
           title: i.title || r.title,
           state: i.state,
           stateReason: i.state_reason || null,
-          invisible: !!i.invisible,
-          pinned: labelNames(i).includes(PIN_LABEL),
+          invisible: !!i.invisible || d1PrivateRow,
+          pinned: labelNames(i).includes(PIN_LABEL) || d1PinnedRow,
           labels: labelNames(i),
           commentCount: i.comment_count ?? 0,
           createdAt: i.created_at,
@@ -326,6 +337,19 @@ app.get('/api/issues/:number', async (c) => {
   const issue = await getIssue(c.env, number);
   const mine = await myIssueNumbers(c, session);
   const labels = labelNames(issue);
+  const d1Pinned = !!(await c.env.DB
+    .prepare('SELECT 1 FROM pinned_issues WHERE issue_number = ?')
+    .bind(Number(issue.number))
+    .first());
+  const d1Private = !!(await c.env.DB
+    .prepare('SELECT 1 FROM private_issues WHERE issue_number = ?')
+    .bind(Number(issue.number))
+    .first());
+  const isPrivate = !!issue.invisible || d1Private;
+  // 私密 issue 仅本人可见
+  if (isPrivate && !mine.has(Number(issue.number))) {
+    return c.json({ ok: false, error: 'Issue 不存在或不可见' }, 404);
+  }
 
   return c.json({
     ok: true,
@@ -335,8 +359,8 @@ app.get('/api/issues/:number', async (c) => {
       body: issue.body || '',
       state: issue.state,
       stateReason: issue.state_reason || null,
-      invisible: !!issue.invisible,
-      pinned: labels.includes(PIN_LABEL),
+      invisible: isPrivate,
+      pinned: labels.includes(PIN_LABEL) || d1Pinned,
       links: parseLinkEntries(issue.body || ''),
       labels,
       author: issue.author?.nickname || issue.author?.username || '',
@@ -400,16 +424,32 @@ app.patch('/api/issues/:number', async (c) => {
   }
 
   const updated = await updateIssue(c.env, number, patch);
-  console.log(JSON.stringify({ event: 'issue.updated', number, patch, by: maskEmail(s.email) }));
+  // 站内私密兜底：CNB API 目前会忽略 invisible 字段，本地落库保证本站隐私过滤生效
+  if (patch.invisible === true) {
+    await c.env.DB.prepare('INSERT OR REPLACE INTO private_issues (issue_number, set_at, set_by) VALUES (?, ?, ?)')
+      .bind(Number(number), Date.now(), s.uid)
+      .run();
+  } else if (patch.invisible === false) {
+    await c.env.DB.prepare('DELETE FROM private_issues WHERE issue_number = ?').bind(Number(number)).run();
+  }
+  const cnbApplied = patch.invisible === true ? !!updated.invisible : undefined;
+  console.log(JSON.stringify({ event: 'issue.updated', number, patch, cnbApplied, by: maskEmail(s.email) }));
+  const invisible = patch.invisible === true
+    ? true
+    : patch.invisible === false
+      ? false
+      : !!updated.invisible || !!(await c.env.DB.prepare('SELECT 1 FROM private_issues WHERE issue_number = ?').bind(Number(number)).first());
   return c.json({
     ok: true,
     state: updated.state,
     stateReason: updated.state_reason || null,
-    invisible: !!updated.invisible,
+    invisible,
+    ...(cnbApplied !== undefined ? { cnbApplied } : {}),
   });
 });
 
-// 置顶 / 取消置顶（以「置顶」标签实现；仅限本人）
+// 置顶 / 取消置顶（仅限本人）
+// CNB 标签同步为尽力而为：仓库未授权标签操作（403）时以 D1 站内置顶兜底，本站排序/badge 不受影响
 app.post('/api/issues/:number/pin', async (c) => {
   const s = await requireSession(c);
   if (s instanceof Response) return s;
@@ -423,7 +463,23 @@ app.post('/api/issues/:number/pin', async (c) => {
 
   const issue = await getIssue(c.env, number);
   const labels = labelNames(issue);
-  const pinned = labels.includes(PIN_LABEL);
+  const d1Pinned = !!(await c.env.DB
+    .prepare('SELECT 1 FROM pinned_issues WHERE issue_number = ?')
+    .bind(Number(number))
+    .first());
+  const pinned = labels.includes(PIN_LABEL) || d1Pinned;
+
+  // 本站置顶状态先落库（保证无论如何置顶都生效）
+  if (pinned) {
+    await c.env.DB.prepare('DELETE FROM pinned_issues WHERE issue_number = ?').bind(Number(number)).run();
+  } else {
+    await c.env.DB.prepare('INSERT OR REPLACE INTO pinned_issues (issue_number, pinned_at, pinned_by) VALUES (?, ?, ?)')
+      .bind(Number(number), Date.now(), s.uid)
+      .run();
+  }
+
+  // CNB 侧标签尽力同步（无权限/标签不存在时仅影响 CNB 网页展示）
+  let labelSynced = true;
   try {
     if (pinned) {
       await removeLabel(c.env, number, PIN_LABEL);
@@ -431,14 +487,17 @@ app.post('/api/issues/:number/pin', async (c) => {
       await addLabels(c.env, number, [PIN_LABEL]);
     }
   } catch (e) {
-    // CNB 对不存在的标签可能报错：提示站长到仓库预建「置顶」标签
-    if (e instanceof CnbApiError) {
-      return c.json({ ok: false, error: `${e.message}（若提示标签不存在，请先在 CNB 仓库创建「置顶」标签）` }, 502);
-    }
-    throw e;
+    if (e instanceof CnbApiError) labelSynced = false;
+    else throw e;
   }
-  console.log(JSON.stringify({ event: pinned ? 'issue.unpinned' : 'issue.pinned', number, by: maskEmail(s.email) }));
-  return c.json({ ok: true, pinned: !pinned });
+
+  console.log(JSON.stringify({ event: pinned ? 'issue.unpinned' : 'issue.pinned', number, labelSynced, by: maskEmail(s.email) }));
+  return c.json({
+    ok: true,
+    pinned: !pinned,
+    labelSynced,
+    message: !pinned && !labelSynced ? '已置顶（CNB 标签无权限，仅本站生效）' : undefined,
+  });
 });
 
 // 绑定 / 解绑（关联其他 Issue 或提交，写入正文尾部段落；仅限本人）

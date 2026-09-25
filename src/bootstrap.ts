@@ -39,6 +39,18 @@ const SCHEMA_STATEMENTS: string[] = [
 )`,
   `CREATE INDEX IF NOT EXISTS idx_user_comments_user ON user_comments(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_user_comments_issue ON user_comments(issue_number)`,
+  // 站内置顶表：CNB 标签操作可能无权限（403），置顶状态以本表兜底（列表排序与 badge 用）
+  `CREATE TABLE IF NOT EXISTS pinned_issues (
+  issue_number INTEGER PRIMARY KEY,
+  pinned_at    INTEGER NOT NULL,
+  pinned_by    INTEGER
+)`,
+  // 站内私密表：CNB API 目前忽略 invisible 字段，本表兜底实现站内隐私过滤（非所有者不可见）
+  `CREATE TABLE IF NOT EXISTS private_issues (
+  issue_number INTEGER PRIMARY KEY,
+  set_at       INTEGER NOT NULL,
+  set_by       INTEGER
+)`,
 ];
 
 let ready: Promise<void> | null = null;

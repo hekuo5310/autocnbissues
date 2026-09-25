@@ -88,15 +88,20 @@ mockApp.get('/api/issues', async (c, next) => {
   const state = c.req.query('state') || 'open';
   const created = await getCreatedIssues(c.env);
   const all = [...created, ...BASE_ISSUES].filter((i) => state === 'all' || i.state === state);
+  const privateRows = await c.env.DB.prepare('SELECT issue_number FROM private_issues').all<{ issue_number: number }>();
+  const d1Private = new Set((privateRows.results ?? []).map((r) => r.issue_number));
   return c.json({
     ok: true,
-    issues: all.map((i) => ({
-      ...i,
-      invisible: !!i.invisible,
-      pinned: i.labels.includes(PIN_LABEL),
-      stateReason: i.state_reason || null,
-      isMine: i.number >= 500,
-    })),
+    issues: all
+      .map((i) => ({
+        ...i,
+        invisible: !!i.invisible || d1Private.has(i.number),
+        pinned: i.labels.includes(PIN_LABEL),
+        stateReason: i.state_reason || null,
+        isMine: i.number >= 500,
+      }))
+      // 私密 issue 仅本人可见（与生产一致）
+      .filter((x) => !x.invisible || x.isMine),
     page: 1,
     hasMore: false,
   });
@@ -108,11 +113,15 @@ mockApp.get('/api/issues/:number', async (c, next) => {
   const created = await getCreatedIssues(c.env);
   const i = created.find((x) => x.number === n) ?? BASE_ISSUES.find((x) => x.number === n);
   if (!i) return c.json({ ok: false, error: 'Issue 不存在（mock）' }, 404);
+  const d1PrivateRow = !!(await c.env.DB.prepare('SELECT 1 FROM private_issues WHERE issue_number = ?').bind(n).first());
+  const isPrivate = !!i.invisible || d1PrivateRow;
+  // 私密 issue 仅本人可见（与生产一致）
+  if (isPrivate && n < 500) return c.json({ ok: false, error: 'Issue 不存在或不可见' }, 404);
   return c.json({
     ok: true,
     issue: {
       ...i,
-      invisible: !!i.invisible,
+      invisible: isPrivate,
       pinned: i.labels.includes(PIN_LABEL),
       stateReason: i.state_reason || null,
       links: parseLinkEntries(i.body),
@@ -155,9 +164,25 @@ mockApp.patch('/api/issues/:number', async (c, next) => {
     created[idx].state = body.state;
     created[idx].state_reason = body.state === 'closed' ? (body.state_reason || 'completed') : 'reopened';
   }
-  if (typeof body.invisible === 'boolean') created[idx].invisible = body.invisible;
+  if (typeof body.invisible === 'boolean') {
+    created[idx].invisible = body.invisible;
+    // 与生产一致：私密状态同时落 D1（站点级兜底）
+    if (body.invisible === true) {
+      await c.env.DB.prepare('INSERT OR REPLACE INTO private_issues (issue_number, set_at, set_by) VALUES (?, ?, ?)')
+        .bind(n, Date.now(), s.uid)
+        .run();
+    } else {
+      await c.env.DB.prepare('DELETE FROM private_issues WHERE issue_number = ?').bind(n).run();
+    }
+  }
   await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
-  return c.json({ ok: true, state: created[idx].state, stateReason: created[idx].state_reason || null, invisible: !!created[idx].invisible });
+  return c.json({
+    ok: true,
+    state: created[idx].state,
+    stateReason: created[idx].state_reason || null,
+    invisible: !!created[idx].invisible,
+    ...(typeof body.invisible === 'boolean' ? { cnbApplied: true } : {}),
+  });
 });
 
 mockApp.post('/api/issues/:number/pin', async (c, next) => {
@@ -175,7 +200,7 @@ mockApp.post('/api/issues/:number/pin', async (c, next) => {
   const pinned = created[idx].labels.includes(PIN_LABEL);
   created[idx].labels = pinned ? created[idx].labels.filter((l) => l !== PIN_LABEL) : [...created[idx].labels, PIN_LABEL];
   await c.env.KV.put(ISSUES_KEY, JSON.stringify(created));
-  return c.json({ ok: true, pinned: !pinned });
+  return c.json({ ok: true, pinned: !pinned, labelSynced: true });
 });
 
 mockApp.post('/api/issues/:number/links', async (c, next) => {
@@ -301,7 +326,7 @@ mockApp.post('/api/issues', async (c, next) => {
   )
     .bind(s.uid, number, 'mock', title, Date.now())
     .run();
-  return c.json({ ok: true, number });
+  return c.json({ ok: true, number, labelsApplied: true });
 });
 
 mockApp.get('/api/my/issues', async (c, next) => {
