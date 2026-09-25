@@ -1,0 +1,362 @@
+{
+  "blankIssuesEnabled": true,
+  "templates": [
+    {
+      "key": "0-feature-request",
+      "name": "功能建议",
+      "description": "希望喵聚新增或调整某个功能",
+      "labels": [
+        "功能建议"
+      ],
+      "body": [
+        {
+          "type": "markdown",
+          "attributes": {
+            "value": "感谢你为喵聚提出改进想法。\n\n请尽可能填写以下内容，描述得越具体，越容易判断可行性。\n"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "problem",
+          "attributes": {
+            "label": "这个功能要解决什么问题？",
+            "description": "先说痛点或场景，再说方案，避免直接跳到实现细节",
+            "placeholder": "例如：现在看视频想换清晰度要退出全屏，很打断观看体验\n"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "solution",
+          "attributes": {
+            "label": "设想的方案？如有",
+            "placeholder": "例如：播放器控制栏里加一个清晰度按钮，直接在播放中切换\n"
+          }
+        },
+        {
+          "type": "input",
+          "id": "where",
+          "attributes": {
+            "label": "相关的页面地址？如有",
+            "description": "页面上方的地址，直接复制过来就行",
+            "placeholder": "https://www.miaoju.top/…"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "alternative",
+          "attributes": {
+            "label": "试过的替代办法？如有",
+            "placeholder": "其他产品里的做法、暂时的手工绕过方式等"
+          }
+        }
+      ]
+    },
+    {
+      "key": "1-bug-report",
+      "name": "Bug 反馈",
+      "description": "页面、接口、播放、上传等出现异常",
+      "labels": [
+        "Bug:待鉴定"
+      ],
+      "body": [
+        {
+          "type": "markdown",
+          "attributes": {
+            "value": "感谢反馈！请尽可能填全，能大幅缩短定位时间。\n\n> 涉及安全问题的漏洞**不要**在这里提，请看 `安全漏洞` 模版。\n"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "what",
+          "attributes": {
+            "label": "简单描述一下问题和重现方式",
+            "placeholder": "1. 打开 …\n2. 点击 …\n3. 期望 …\n4. 实际 …\n"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "input",
+          "id": "where",
+          "attributes": {
+            "label": "报错地址",
+            "description": "出问题的页面地址，从浏览器地址栏直接复制",
+            "placeholder": "https://www.miaoju.top/…"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "error",
+          "attributes": {
+            "label": "具体报错",
+            "description": "页面上的提示文案、红色报错，复制或截图都行；控制台报错更好",
+            "placeholder": "例如：Failed to load resource: the server responded with a status of 404\n例如：播放器提示「视频不存在」\n"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "input",
+          "id": "time",
+          "attributes": {
+            "label": "发生时间",
+            "placeholder": "2026-05-09 14:30 (UTC+8)"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "trace",
+          "attributes": {
+            "label": "补充信息（按需，有则填）",
+            "placeholder": "- 页面异常：页面上的 trace-id、浏览器控制台完整报错\n- 请求异常：响应头里的 traceparent、状态码\n- 播放异常：视频链接或 vid\n- 上传异常：提示里的「阶段 + code」、文件大小与格式\n- 账号相关：登录方式、用户 id\n"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "evidence",
+          "attributes": {
+            "label": "截图 / 录屏 / 日志？如有",
+            "description": "直接拖拽上传文件即可"
+          }
+        }
+      ]
+    },
+    {
+      "key": "2-experience-report",
+      "name": "体验问题",
+      "description": "功能没坏，但用起来别扭、不顺手",
+      "labels": [
+        "仅讨论"
+      ],
+      "body": [
+        {
+          "type": "markdown",
+          "attributes": {
+            "value": "功能没错，但手感不对——这类问题同样重要，请放心提。\n"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "bad",
+          "attributes": {
+            "label": "描述一下体验不好的点",
+            "placeholder": "例如：稿件管理列表里看不出哪条在转码，只能一条条点进去看\n"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "input",
+          "id": "where",
+          "attributes": {
+            "label": "相关的页面地址？如有",
+            "description": "页面上方的地址，直接复制过来就行",
+            "placeholder": "https://www.miaoju.top/…"
+          }
+        },
+        {
+          "type": "dropdown",
+          "id": "aspect",
+          "attributes": {
+            "label": "主要涉及哪方面",
+            "options": [
+              "交互与操作路径",
+              "视觉与排版",
+              "文案与提示",
+              "性能（卡顿、加载慢）",
+              "移动端适配",
+              "其他"
+            ]
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "suggestion",
+          "attributes": {
+            "label": "期望的体验？如有"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "evidence",
+          "attributes": {
+            "label": "截图 / 录屏？如有",
+            "description": "直接拖拽上传文件即可"
+          }
+        }
+      ]
+    },
+    {
+      "key": "3-outage-report",
+      "name": "服务异常",
+      "description": "喵聚打不开、接口报错、视频无法播放等故障",
+      "labels": [
+        "Bug:待鉴定"
+      ],
+      "body": [
+        {
+          "type": "markdown",
+          "attributes": {
+            "value": "感谢反馈！请尽可能描述以下内容，帮助快速定位问题。\n"
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "what",
+          "attributes": {
+            "label": "描述现象",
+            "placeholder": "例如页面白屏、接口 502、视频一直转圈、上传卡住等"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "input",
+          "id": "where",
+          "attributes": {
+            "label": "报错地址",
+            "description": "出问题的页面地址，从浏览器地址栏直接复制",
+            "placeholder": "https://www.miaoju.top/…"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "error",
+          "attributes": {
+            "label": "具体报错",
+            "description": "页面上的提示文案、红色报错，复制或截图都行；控制台报错更好",
+            "placeholder": "例如：接口返回 502\n例如：页面提示「服务暂时不可用」\n"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "dropdown",
+          "id": "scope",
+          "attributes": {
+            "label": "影响范围",
+            "options": [
+              "全站不可用",
+              "单个功能不可用",
+              "偶发，刷新后恢复",
+              "只有我一个人"
+            ]
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "input",
+          "id": "time",
+          "attributes": {
+            "label": "发生时间",
+            "placeholder": "2026-05-09 14:30 (UTC+8)"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "trace",
+          "attributes": {
+            "label": "trace-id / 日志 / 截图？如有",
+            "description": "页面上的 trace-id、响应头里的 traceparent，或相关日志链接"
+          }
+        }
+      ]
+    },
+    {
+      "key": "4-security-report",
+      "name": "安全漏洞",
+      "description": "越权、注入、敏感信息泄露等安全问题",
+      "labels": [
+        "安全:待鉴定"
+      ],
+      "body": [
+        {
+          "type": "markdown",
+          "attributes": {
+            "value": "⚠️ **请勿在公开 Issue 中直接贴出可复现的攻击细节、真实用户数据或密钥。**\n\n如需提交敏感细节，可以先把 Issue 写得模糊一些，我们会主动联系你获取详情；\n或直接通过仓库维护者的联系方式私下沟通。\n"
+          }
+        },
+        {
+          "type": "dropdown",
+          "id": "type",
+          "attributes": {
+            "label": "漏洞类型",
+            "options": [
+              "权限绕过 / 越权",
+              "敏感信息泄露",
+              "注入（SQL / 命令 / 模板）",
+              "文件上传 / 路径穿越",
+              "依赖或供应链",
+              "其他"
+            ]
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "input",
+          "id": "where",
+          "attributes": {
+            "label": "地址",
+            "description": "出问题的页面地址，从浏览器地址栏直接复制",
+            "placeholder": "https://www.miaoju.top/…"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "desc",
+          "attributes": {
+            "label": "问题描述",
+            "description": "只写到「哪个页面/接口、什么条件下有问题」即可，先不要给完整利用步骤",
+            "placeholder": "例如：普通用户 A 可以读取到用户 B 的私信列表"
+          },
+          "validations": {
+            "required": true
+          }
+        },
+        {
+          "type": "textarea",
+          "id": "impact",
+          "attributes": {
+            "label": "可能的影响",
+            "placeholder": "能读到什么数据、能改什么、影响范围"
+          }
+        },
+        {
+          "type": "input",
+          "id": "contact",
+          "attributes": {
+            "label": "联系方式",
+            "description": "便于我们私下与你确认细节（邮箱 / 微信 / CNB 用户名）"
+          }
+        }
+      ]
+    }
+  ]
+}

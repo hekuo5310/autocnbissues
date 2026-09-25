@@ -1,0 +1,24 @@
+{
+  "name": "autocnb-issues",
+  "version": "1.0.0",
+  "private": true,
+  "description": "喵聚 Issues — 通过 CNB OpenAPI 向 cnb.cool/MiaoJu/issue 提交与跟踪 Issue 的 Cloudflare Workers 应用",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:local": "wrangler d1 execute autocnb-issues --local --file=migrations/0001_init.sql",
+    "db:remote": "wrangler d1 execute autocnb-issues --remote --file=migrations/0001_init.sql"
+  },
+  "dependencies": {
+    "hono": "^4.9.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260923.1",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.40.0"
+  }
+}

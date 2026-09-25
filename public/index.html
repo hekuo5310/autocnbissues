@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>喵聚 Issues · 问题反馈与功能建议</title>
+  <meta name="description" content="向喵聚提交 Issue：通过模板快速反馈 Bug、建议功能，登录后可查看与回复" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%B1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+</head>
+<body>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="logo" href="#/new">
+        <span class="logo-mark">🐱</span>
+        <span class="logo-text">喵聚 <em>Issues</em></span>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        <a href="#/new" data-nav="new">提交 Issue</a>
+        <a href="#/issues" data-nav="issues">Issue 列表</a>
+        <a href="#/mine" data-nav="mine">我的</a>
+      </nav>
+      <div class="header-user" id="header-user">
+        <button class="btn btn-ghost" id="btn-login">登录</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" aria-live="polite">
+    <div class="page-loading"><div class="spinner"></div></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span>通过 <a href="https://docs.cnb.cool/zh/develops/openapi.html" target="_blank" rel="noopener">CNB OpenAPI</a> 驱动 · 部署于 Cloudflare Workers</span>
+      <span class="footer-repo"><a id="footer-repo-link" href="https://cnb.cool/MiaoJu/issue" target="_blank" rel="noopener">cnb.cool/MiaoJu/issue</a></span>
+    </div>
+  </footer>
+
+  <!-- 登录弹窗 -->
+  <div class="modal-mask" id="login-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <button class="modal-close" id="login-close" aria-label="关闭">✕</button>
+      <h2 id="login-title">登录喵聚 Issues</h2>
+      <p class="modal-sub">使用邮箱验证码登录，无需密码。登录后可提交 Issue 并参与回复。</p>
+
+      <div class="form-field">
+        <label for="login-email">邮箱地址</label>
+        <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" />
+      </div>
+
+      <div class="form-field" id="code-row" hidden>
+        <label for="login-code">验证码 <span class="muted">（已发送至邮箱，10 分钟内有效）</span></label>
+        <div class="code-row">
+          <input type="text" id="login-code" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="one-time-code" />
+          <button class="btn btn-outline" id="btn-resend" disabled>60s 后重发</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="btn-next">获取验证码</button>
+      <p class="login-error" id="login-error" role="alert"></p>
+      <p class="login-tip" id="login-tip" hidden></p>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toast-wrap" aria-live="assertive"></div>
+
+  <script src="/core.js"></script>
+  <script src="/views.js"></script>
+</body>
+</html>

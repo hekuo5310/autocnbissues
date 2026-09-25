@@ -1,0 +1,14 @@
+# 本地开发变量示例 —— 复制为 .dev.vars 使用（.dev.vars 已被 gitignore，不会提交）
+
+# CNB Personal Access Token（必填，服务端使用）
+CNB_TOKEN=your_cnb_personal_access_token
+
+# 开发模式：true 时邮件走本地模拟（验证码通过响应 devCode 透出或看日志），
+# 且 src/dev-mock.ts 的 CNB mock 生效。生产环境必须为 false。
+DEV_MODE=true
+
+# 发件邮箱（需属于已接入 Cloudflare Email Sending 的域名；本地模拟不真实发信，可随意填）
+MAIL_FROM=noreply@dev.local
+
+# 本地想连真实 CNB（不使用 mock）时，把 CNB_REPO 指向你的测试仓库
+# CNB_REPO=your-name/issue-test
