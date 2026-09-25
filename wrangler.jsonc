@@ -1,7 +1,7 @@
 // wrangler 配置 — Cloudflare Workers + D1 + KV + Email Sending
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "autocnb-issues",
+	"name": "autocnbissues",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-09-01",
 	"compatibility_flags": [
